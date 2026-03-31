@@ -144,6 +144,7 @@ def generate_report(
     scan_results: list[dict], cve_matches: dict[int, list[dict]], scan_type: str
 ) -> tuple[Path, Path]:
     """Generate text and JSON reports for a completed scan."""
+    print("Generating reports...")
     REPORTS_DIR.mkdir(parents=True, exist_ok=True)
 
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -172,4 +173,5 @@ def generate_report(
         total_cves,
     )
 
+    print("Reports saved.")
     return txt_path, json_path

@@ -2,14 +2,17 @@
 
 from __future__ import annotations
 
+import sqlite3
 import sys
 import time
+from datetime import datetime, timezone
+
 import requests
 
 try:
-    from cve_lookup import DB_PATH, DATA_DIR, get_severity_label, initialize_db, insert_cve
+    from cve_lookup import DB_PATH, DATA_DIR, get_severity_label, initialize_db
 except ImportError:  # pragma: no cover - package-style import fallback
-    from .cve_lookup import DB_PATH, DATA_DIR, get_severity_label, initialize_db, insert_cve
+    from .cve_lookup import DB_PATH, DATA_DIR, get_severity_label, initialize_db
 
 
 NVD_API_URL = "https://services.nvd.nist.gov/rest/json/cves/2.0"
@@ -18,6 +21,8 @@ DEFAULT_REMEDIATION = (
     "Refer to vendor advisory and apply available patches or mitigations."
 )
 PROGRESS_BAR_WIDTH = 40
+INSERT_BATCH_SIZE = 1000
+LAST_UPDATED_PATH = DATA_DIR / "last_updated.txt"
 
 
 def rotate_backups() -> None:
@@ -39,31 +44,39 @@ def rotate_backups() -> None:
         current_db.replace(backup_1)
 
 
-def _render_progress(current: int, total: int) -> None:
-    """Render an in-place ASCII progress bar for the NVD download."""
+def _render_progress(label: str, current: int, total: int) -> None:
+    """Render an in-place ASCII progress bar."""
+    display_total = total
     if total <= 0:
-        total = 1
-
-    percent = int((current / total) * 100)
-    filled = int((current / total) * PROGRESS_BAR_WIDTH)
+        percent = 100
+        filled = PROGRESS_BAR_WIDTH
+    else:
+        percent = int((current / total) * 100)
+        filled = int((current / total) * PROGRESS_BAR_WIDTH)
     bar = "=" * filled + " " * (PROGRESS_BAR_WIDTH - filled)
-    sys.stdout.write(
-        f"\rDownloading CVEs... [{bar}] {current}/{total} ({percent}%)"
-    )
+    sys.stdout.write(f"\r{label} [{bar}] {current}/{display_total} ({percent}%)")
     sys.stdout.flush()
 
 
-def download_nvd_data() -> list[dict]:
+def download_nvd_data(
+    last_mod_start_date: str | None = None, last_mod_end_date: str | None = None
+) -> list[dict]:
     """Fetch all CVE items from the paginated NVD 2.0 API."""
     raw_items: list[dict] = []
     start_index = 0
     total_results: int | None = None
+    request_params: dict[str, str | int] = {"resultsPerPage": PAGE_SIZE}
+
+    if last_mod_start_date and last_mod_end_date:
+        request_params["lastModStartDate"] = last_mod_start_date
+        request_params["lastModEndDate"] = last_mod_end_date
 
     while total_results is None or start_index < total_results:
         try:
+            request_params["startIndex"] = start_index
             response = requests.get(
                 NVD_API_URL,
-                params={"startIndex": start_index, "resultsPerPage": PAGE_SIZE},
+                params=request_params,
                 timeout=30,
             )
             response.raise_for_status()
@@ -83,20 +96,63 @@ def download_nvd_data() -> list[dict]:
             if isinstance(item, dict):
                 raw_items.append(item)
 
-        _render_progress(len(raw_items), total_results)
+        _render_progress("Downloading CVEs...", len(raw_items), total_results)
 
         if not vulnerabilities:
             break
 
-        start_index += PAGE_SIZE
         time.sleep(6)
+        start_index += PAGE_SIZE
 
     if total_results is not None:
-        _render_progress(len(raw_items), total_results)
+        _render_progress("Downloading CVEs...", len(raw_items), total_results)
         sys.stdout.write("\n")
         sys.stdout.flush()
 
     return raw_items
+
+
+def _current_timestamp() -> str:
+    return datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
+
+
+def _load_last_updated_timestamp() -> str | None:
+    if not LAST_UPDATED_PATH.exists():
+        return None
+
+    timestamp = LAST_UPDATED_PATH.read_text(encoding="utf-8").strip()
+    return timestamp or None
+
+
+def _write_last_updated_timestamp(timestamp: str) -> None:
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
+    LAST_UPDATED_PATH.write_text(timestamp, encoding="utf-8")
+
+
+def _insert_cves_batch(records: list[tuple]) -> None:
+    """Insert parsed CVEs in one transaction using chunked executemany calls."""
+    if not records:
+        _render_progress("Inserting CVEs...", 0, 0)
+        sys.stdout.write("\n")
+        sys.stdout.flush()
+        return
+
+    with sqlite3.connect(DB_PATH) as connection:
+        for start in range(0, len(records), INSERT_BATCH_SIZE):
+            batch = records[start : start + INSERT_BATCH_SIZE]
+            connection.executemany(
+                "INSERT OR REPLACE INTO cves VALUES (?,?,?,?,?,?,?,?)",
+                batch,
+            )
+            _render_progress(
+                "Inserting CVEs...",
+                min(start + len(batch), len(records)),
+                len(records),
+            )
+        connection.commit()
+
+    sys.stdout.write("\n")
+    sys.stdout.flush()
 
 
 def _get_english_description(cve_data: dict) -> str:
@@ -214,11 +270,19 @@ def parse_cve(raw: dict) -> dict | None:
 
 def update_database() -> None:
     """Download, parse, and store CVEs in the local SQLite database."""
+    last_updated = _load_last_updated_timestamp()
+    current_timestamp = _current_timestamp()
+
+    if last_updated:
+        print(f"Performing incremental update from {last_updated} to {current_timestamp}.")
+    else:
+        print("Performing full update.")
+
     rotate_backups()
     initialize_db()
 
-    raw_cves = download_nvd_data()
-    inserted = 0
+    raw_cves = download_nvd_data(last_updated, current_timestamp) if last_updated else download_nvd_data()
+    records: list[tuple] = []
     skipped = 0
 
     for raw_cve in raw_cves:
@@ -227,10 +291,23 @@ def update_database() -> None:
             skipped += 1
             continue
 
-        insert_cve(parsed)
-        inserted += 1
+        records.append(
+            (
+                parsed["id"],
+                parsed["service"],
+                parsed["version"],
+                parsed["cvss_score"],
+                parsed["severity_label"],
+                parsed["description"],
+                parsed["remediation"],
+                parsed["reference_url"],
+            )
+        )
+
+    _insert_cves_batch(records)
+    _write_last_updated_timestamp(current_timestamp)
 
     print(
         f"Update complete. Total fetched: {len(raw_cves)}, "
-        f"total inserted: {inserted}, total skipped: {skipped}"
+        f"total inserted: {len(records)}, total skipped: {skipped}"
     )

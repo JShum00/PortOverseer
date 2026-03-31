@@ -2,6 +2,10 @@
 
 from __future__ import annotations
 
+import itertools
+import sys
+import threading
+import time
 from typing import TypedDict
 
 try:
@@ -24,6 +28,19 @@ class ScanResult(TypedDict):
 
 class ScannerError(RuntimeError):
     """Raised when the local scan environment is unavailable or a scan fails."""
+
+
+def _spinner_worker(stop_event: threading.Event) -> None:
+    """Render an in-place spinner while Nmap is running."""
+    for frame in itertools.cycle("|/-\\"):
+        if stop_event.is_set():
+            break
+        sys.stdout.write(f"\rScanning... {frame}")
+        sys.stdout.flush()
+        time.sleep(0.1)
+
+    sys.stdout.write("\rScanning... done\n")
+    sys.stdout.flush()
 
 
 def _build_version_string(port_data: dict) -> str:
@@ -77,6 +94,11 @@ def _extract_open_ports(scanner: "nmap.PortScanner") -> list[ScanResult]:
 
 def _run_scan(port_range: str | None = None) -> list[ScanResult]:
     scanner = _get_scanner()
+    stop_event = threading.Event()
+    spinner_thread = threading.Thread(
+        target=_spinner_worker, args=(stop_event,), daemon=True
+    )
+    spinner_thread.start()
 
     try:
         scan_result = scanner.scan(hosts=TARGET_HOST, ports=port_range, arguments=VERSION_ARGS)
@@ -84,6 +106,9 @@ def _run_scan(port_range: str | None = None) -> list[ScanResult]:
         raise ScannerError(f"Nmap scan failed: {exc}") from exc
     except Exception as exc:  # pragma: no cover - defensive runtime guard
         raise ScannerError(f"Unexpected scan failure: {exc}") from exc
+    finally:
+        stop_event.set()
+        spinner_thread.join()
 
     if not scan_result or "scan" not in scan_result:
         raise ScannerError("Nmap returned an empty or invalid scan result.")
