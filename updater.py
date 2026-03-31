@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import sys
-
+import time
 import requests
 
 try:
@@ -89,6 +89,7 @@ def download_nvd_data() -> list[dict]:
             break
 
         start_index += PAGE_SIZE
+        time.sleep(6)
 
     if total_results is not None:
         _render_progress(len(raw_items), total_results)
