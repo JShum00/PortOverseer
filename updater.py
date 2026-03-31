@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from pathlib import Path
+import sys
 
 import requests
 
@@ -17,6 +17,7 @@ PAGE_SIZE = 2000
 DEFAULT_REMEDIATION = (
     "Refer to vendor advisory and apply available patches or mitigations."
 )
+PROGRESS_BAR_WIDTH = 40
 
 
 def rotate_backups() -> None:
@@ -38,6 +39,20 @@ def rotate_backups() -> None:
         current_db.replace(backup_1)
 
 
+def _render_progress(current: int, total: int) -> None:
+    """Render an in-place ASCII progress bar for the NVD download."""
+    if total <= 0:
+        total = 1
+
+    percent = int((current / total) * 100)
+    filled = int((current / total) * PROGRESS_BAR_WIDTH)
+    bar = "=" * filled + " " * (PROGRESS_BAR_WIDTH - filled)
+    sys.stdout.write(
+        f"\rDownloading CVEs... [{bar}] {current}/{total} ({percent}%)"
+    )
+    sys.stdout.flush()
+
+
 def download_nvd_data() -> list[dict]:
     """Fetch all CVE items from the paginated NVD 2.0 API."""
     raw_items: list[dict] = []
@@ -45,9 +60,6 @@ def download_nvd_data() -> list[dict]:
     total_results: int | None = None
 
     while total_results is None or start_index < total_results:
-        end_index = start_index + PAGE_SIZE
-        print(f"Fetching CVEs {start_index}-{end_index}...")
-
         try:
             response = requests.get(
                 NVD_API_URL,
@@ -71,10 +83,17 @@ def download_nvd_data() -> list[dict]:
             if isinstance(item, dict):
                 raw_items.append(item)
 
+        _render_progress(len(raw_items), total_results)
+
         if not vulnerabilities:
             break
 
         start_index += PAGE_SIZE
+
+    if total_results is not None:
+        _render_progress(len(raw_items), total_results)
+        sys.stdout.write("\n")
+        sys.stdout.flush()
 
     return raw_items
 
