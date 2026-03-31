@@ -10,16 +10,6 @@ import subprocess
 import sys
 from pathlib import Path
 
-try:
-    import colors
-    import cve_lookup
-    import reporter
-    import scanner
-    import updater
-except ImportError:  # pragma: no cover - package-style import fallback
-    from . import colors, cve_lookup, reporter, scanner, updater
-
-
 TITLE_ART = r"""
                        _______    ______     _______  ___________
                       |   __ "\  /    " \   /"      \("     _   ")
@@ -39,12 +29,19 @@ TITLE_ART = r"""
 """
 
 TAGLINE = "Vulnerability Hunt & Scan // v1.0"
-REPORTS_DIR = reporter.REPORTS_DIR
+PROJECT_ROOT = Path(__file__).resolve().parent
+REPORTS_DIR = PROJECT_ROOT / "reports"
+
+colors = None
+cve_lookup = None
+reporter = None
+scanner = None
+updater = None
 
 
 def ensure_environment() -> None:
-    """Relaunch with the project venv and elevated privileges when needed."""
-    script_dir = Path(__file__).resolve().parent
+    """Check environment and guide user if setup is incorrect."""
+    script_dir = PROJECT_ROOT
     system_name = platform.system()
 
     if system_name == "Windows":
@@ -52,31 +49,49 @@ def ensure_environment() -> None:
     else:
         venv_python = script_dir / "venv" / "bin" / "python3"
 
-    current_python = Path(sys.executable).resolve()
-    if venv_python.exists():
-        if current_python != venv_python.resolve():
-            os.execv(str(venv_python), [str(venv_python), *sys.argv])
-    else:
-        print(f"Warning: Virtual environment not found at {venv_python}. Continuing anyway.")
+    if not venv_python.exists():
+        print(
+            "Error: Project virtual environment not found. "
+            f"Create it at {venv_python.parent} and install dependencies first."
+        )
+        sys.exit(1)
 
-    if has_required_privileges():
+    active_prefix = Path(sys.prefix).resolve()
+    venv_dir = (script_dir / "venv").resolve()
+
+    if active_prefix != venv_dir:
+        print(
+            "Error: Port Overseer must be run using the project virtual environment.\n"
+            f"Run it with: sudo {venv_python} main.py"
+        )
+        sys.exit(1)
+
+
+def bootstrap_modules() -> None:
+    """Import local modules after the interpreter environment has been normalized."""
+    global colors, cve_lookup, reporter, scanner, updater
+
+    if all(module is not None for module in (colors, cve_lookup, reporter, scanner, updater)):
         return
 
-    if system_name == "Linux":
-        os.execvp("sudo", ["sudo", sys.executable, *sys.argv])
+    try:
+        import colors as colors_module
+        import cve_lookup as cve_lookup_module
+        import reporter as reporter_module
+        import scanner as scanner_module
+        import updater as updater_module
+    except ImportError:  # pragma: no cover - package-style import fallback
+        from . import colors as colors_module
+        from . import cve_lookup as cve_lookup_module
+        from . import reporter as reporter_module
+        from . import scanner as scanner_module
+        from . import updater as updater_module
 
-    if system_name == "Windows":
-        params = subprocess.list2cmdline(sys.argv)
-        result = ctypes.windll.shell32.ShellExecuteW(  # type: ignore[attr-defined]
-            None,
-            "runas",
-            sys.executable,
-            params,
-            None,
-            1,
-        )
-        if result > 32:
-            sys.exit(0)
+    colors = colors_module
+    cve_lookup = cve_lookup_module
+    reporter = reporter_module
+    scanner = scanner_module
+    updater = updater_module
 
 
 def has_required_privileges() -> bool:
@@ -309,6 +324,7 @@ def handle_selection(choice: str) -> bool:
 
 def main() -> None:
     ensure_environment()
+    bootstrap_modules()
     enforce_privileges()
     cve_lookup.initialize_db()
     if _database_is_empty():

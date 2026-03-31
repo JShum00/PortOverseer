@@ -112,17 +112,17 @@ Download the installer from [nmap.org](https://nmap.org/download.html) and follo
 
 ## Usage
 
-Port Overseer must be run with elevated privileges.
+Port Overseer must be run with elevated privileges. I went ahead and handled that with a launcher, you're welcome.
 
 **Linux:**
 ```bash
-sudo python3 main.py
+./launcher.sh
 ```
 
 **Windows:**
 Open an Administrator command prompt, then:
 ```cmd
-python main.py
+run.bat
 ```
 
 ### Main Menu
@@ -194,6 +194,8 @@ This report is intended for authorized use only. Scan target: localhost (127.0.0
 
 ```
 port-overseer/
+├── launcher.sh      # Linux Shell script to launch the program for you.
+├── launcher.bat     # Windows Batch script to launch the program for you.
 ├── main.py          # Entry point — menu, ASCII art, routing
 ├── scanner.py       # Nmap integration — port/service scanning
 ├── cve_lookup.py    # SQLite CVE database and lookup logic
