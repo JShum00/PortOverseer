@@ -158,6 +158,8 @@ Reports saved.
 Report saved: /path/to/PortOverseer/reports/scan_20260330_234226.txt
 Report saved: /path/to/PortOverseer/reports/scan_20260330_234226.json
 ```
+Example of Critical Threats:
+![Critical Threats detected on Windows VM](./assets/port-overseer-3-windows.png)
 
 ### Report files
 
