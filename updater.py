@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import gc
 import sqlite3
 import sys
 import time
@@ -27,6 +28,7 @@ LAST_UPDATED_PATH = DATA_DIR / "last_updated.txt"
 
 def rotate_backups() -> None:
     """Rotate SQLite database backups, retaining at most three files."""
+    gc.collect()
     DATA_DIR.mkdir(parents=True, exist_ok=True)
 
     current_db = DB_PATH
