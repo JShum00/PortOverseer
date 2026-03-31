@@ -6,7 +6,9 @@ import ctypes
 import os
 import platform
 import sqlite3
+import subprocess
 import sys
+from pathlib import Path
 
 try:
     import colors
@@ -38,6 +40,43 @@ TITLE_ART = r"""
 
 TAGLINE = "Vulnerability Hunt & Scan // v1.0"
 REPORTS_DIR = reporter.REPORTS_DIR
+
+
+def ensure_environment() -> None:
+    """Relaunch with the project venv and elevated privileges when needed."""
+    script_dir = Path(__file__).resolve().parent
+    system_name = platform.system()
+
+    if system_name == "Windows":
+        venv_python = script_dir / "venv" / "Scripts" / "python.exe"
+    else:
+        venv_python = script_dir / "venv" / "bin" / "python3"
+
+    current_python = Path(sys.executable).resolve()
+    if venv_python.exists():
+        if current_python != venv_python.resolve():
+            os.execv(str(venv_python), [str(venv_python), *sys.argv])
+    else:
+        print(f"Warning: Virtual environment not found at {venv_python}. Continuing anyway.")
+
+    if has_required_privileges():
+        return
+
+    if system_name == "Linux":
+        os.execvp("sudo", ["sudo", sys.executable, *sys.argv])
+
+    if system_name == "Windows":
+        params = subprocess.list2cmdline(sys.argv)
+        result = ctypes.windll.shell32.ShellExecuteW(  # type: ignore[attr-defined]
+            None,
+            "runas",
+            sys.executable,
+            params,
+            None,
+            1,
+        )
+        if result > 32:
+            sys.exit(0)
 
 
 def has_required_privileges() -> bool:
@@ -114,6 +153,59 @@ def _run_scan(scan_func, scan_type: str) -> None:
     print(f"Report saved: {json_path}")
 
 
+def _print_audit_section(label: str, results: list[dict], match_map: dict[int, list[dict]]) -> None:
+    print(f"\n{label}")
+    if not results:
+        print("No open ports were found.")
+        return
+
+    for result in results:
+        port = int(result["port"])
+        colors.print_finding(
+            port,
+            result["service"],
+            result["version"],
+            match_map.get(port, []),
+        )
+
+
+def full_local_audit() -> None:
+    depth = input("\nSelect scan depth: 1 for Quick, 2 for Full: ").strip()
+    if depth == "1":
+        port_range = None
+    elif depth == "2":
+        port_range = "1-65535"
+    else:
+        print("\nInvalid selection. Enter 1 or 2.")
+        return
+
+    print("\nStarting Full Local Audit...")
+    try:
+        audit_results = scanner.local_audit_scan(port_range)
+    except scanner.ScannerError as exc:
+        print(f"\nScan failed: {exc}")
+        return
+
+    cve_matches: dict[str, dict[int, list[dict]]] = {"loopback": {}, "lan": {}}
+    for target in ("loopback", "lan"):
+        for result in audit_results.get(target, []):
+            port = int(result["port"])
+            cve_matches[target][port] = cve_lookup.lookup_cves(
+                result["service"], result["version"]
+            )
+
+    _print_audit_section("Loopback Findings (127.0.0.1)", audit_results.get("loopback", []), cve_matches["loopback"])
+    lan_ip = scanner.get_lan_ip()
+    lan_label = f"LAN Findings ({lan_ip})" if lan_ip else "LAN Findings"
+    _print_audit_section(lan_label, audit_results.get("lan", []), cve_matches["lan"])
+
+    txt_path, json_path = reporter.generate_audit_report(
+        audit_results, cve_matches, "Full Local Audit"
+    )
+    print(f"\nReport saved: {txt_path}")
+    print(f"Report saved: {json_path}")
+
+
 def quick_scan() -> None:
     _run_scan(scanner.quick_scan, "Quick Scan")
 
@@ -170,7 +262,9 @@ def show_help() -> None:
         "4. Update Database: Download the NVD CVE dataset from the internet and refresh the "
         "local SQLite CVE database.\n"
         "5. Help: Show this help screen.\n"
-        "6. Exit: Close Port Overseer.\n\n"
+        "6. Full Local Audit: Scan both 127.0.0.1 and the host LAN IP with quick or full depth, "
+        "look up CVEs, and generate separated audit reports.\n"
+        "7. Exit: Close Port Overseer.\n\n"
         "Privilege requirements:\n"
         "- Windows: Run from an Administrator command prompt or terminal.\n"
         "- Linux: Run as root, typically with sudo.\n"
@@ -185,7 +279,8 @@ def print_menu() -> None:
     print("3. Custom Range")
     print("4. Update Database")
     print("5. Help")
-    print("6. Exit")
+    print("6. Full Local Audit")
+    print("7. Exit")
 
 
 def handle_selection(choice: str) -> bool:
@@ -195,15 +290,16 @@ def handle_selection(choice: str) -> bool:
         "3": custom_range,
         "4": update_database,
         "5": show_help,
+        "6": full_local_audit,
     }
 
-    if choice == "6":
+    if choice == "7":
         print("\nExiting Port Overseer.")
         return False
 
     action = actions.get(choice)
     if action is None:
-        print("\nInvalid selection. Enter a number from 1 to 6.")
+        print("\nInvalid selection. Enter a number from 1 to 7.")
         return True
 
     action()
@@ -212,6 +308,7 @@ def handle_selection(choice: str) -> bool:
 
 
 def main() -> None:
+    ensure_environment()
     enforce_privileges()
     cve_lookup.initialize_db()
     if _database_is_empty():

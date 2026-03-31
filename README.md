@@ -116,7 +116,7 @@ Port Overseer must be run with elevated privileges.
 
 **Linux:**
 ```bash
-sudo /path/to/venv/bin/python3 main.py
+sudo python3 main.py
 ```
 
 **Windows:**
@@ -130,10 +130,11 @@ python main.py
 ```
 1. Quick Scan       — Scans top 1,000 common ports
 2. Full Scan        — Scans all 65,535 ports (slower)
-3. Custom Range     — Scans a user-defined port range
-4. Update Database  — Downloads latest CVE data from NVD
-5. Help             — Shows help and usage info
-6. Exit
+3. Full Local Audit — Scans all loopback and localhost LAN ports for a full audit.
+4. Custom Range     — Scans a user-defined port range
+5. Update Database  — Downloads latest CVE data from NVD
+6. Help             — Shows help and usage info
+7. Exit
 ```
 
 ### First-time setup
@@ -211,18 +212,21 @@ port-overseer/
 
 ## Known Limitations
 
-- **Localhost only** — Port Overseer scans `127.0.0.1` exclusively by design. This is an intentional ethical constraint to prevent misuse as a network attack tool.
-- **CVE database staleness** — The local database reflects NVD data at the time of the last update. Run option 4 periodically to stay current.
-- **Service matching accuracy** — CVE correlation depends on Nmap's service and version detection. Unrecognized or generic service strings may return no CVE matches.
-- **Full download on update** — The current update mechanism re-downloads the full NVD dataset. Incremental updates are planned for a future version.
+- **Scan targets** — Port Overseer scans `127.0.0.1` and optionally the host's 
+LAN IP via Full Local Audit mode. Scanning external or third-party hosts is 
+intentionally unsupported.
+- **CVE database staleness** — The local database reflects NVD data at the time 
+of the last update. Run option 5 periodically to stay current.
+- **Service matching accuracy** — CVE correlation depends on Nmap's service and 
+version detection. Unrecognized or generic service strings may return no CVE matches.
 
 ---
 
 ## Planned Features
 
-- Incremental CVE database updates (fetch only new/modified entries since last sync)
 - Full Local Audit mode — scans both localhost and the host's LAN IP for a complete picture
 - Progress indicator during CVE insertion
+- Pyinstaller builds
 
 ---
 

@@ -63,6 +63,22 @@ def _build_findings(scan_results: list[dict], cve_matches: dict[int, list[dict]]
     return findings
 
 
+def _flatten_cve_matches(cve_matches: dict[int, list[dict]]) -> list[dict]:
+    flattened: list[dict] = []
+    for matches in cve_matches.values():
+        flattened.extend(matches)
+    return flattened
+
+
+def _build_audit_findings(
+    audit_results: dict[str, list[dict]], cve_matches: dict[str, dict[int, list[dict]]]
+) -> dict[str, list[dict]]:
+    return {
+        "loopback": _build_findings(audit_results.get("loopback", []), cve_matches.get("loopback", {})),
+        "lan": _build_findings(audit_results.get("lan", []), cve_matches.get("lan", {})),
+    }
+
+
 def _write_text_report(
     path: Path,
     scan_type: str,
@@ -172,6 +188,110 @@ def generate_report(
         findings,
         total_cves,
     )
+
+    print("Reports saved.")
+    return txt_path, json_path
+
+
+def generate_audit_report(
+    audit_results: dict, cve_matches: dict, scan_type: str
+) -> tuple[Path, Path]:
+    """Generate text and JSON reports for a dual-target local audit."""
+    print("Generating reports...")
+    REPORTS_DIR.mkdir(parents=True, exist_ok=True)
+
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    txt_path = REPORTS_DIR / f"scan_{timestamp}.txt"
+    json_path = REPORTS_DIR / f"scan_{timestamp}.json"
+
+    findings = _build_audit_findings(audit_results, cve_matches)
+    loopback_matches = cve_matches.get("loopback", {})
+    lan_matches = cve_matches.get("lan", {})
+    total_ports = len(audit_results.get("loopback", [])) + len(audit_results.get("lan", []))
+    total_cves = sum(len(matches) for matches in loopback_matches.values()) + sum(
+        len(matches) for matches in lan_matches.values()
+    )
+    highest_severity = get_highest_severity(
+        {
+            0: _flatten_cve_matches(loopback_matches),
+            1: _flatten_cve_matches(lan_matches),
+        }
+    )
+
+    lines = [
+        TOOL_NAME,
+        f"Scan Type: {scan_type}",
+        f"Timestamp: {timestamp}",
+        f"Total Ports Scanned: {total_ports}",
+        "",
+        "Summary",
+        f"Total Open Ports: {total_ports}",
+        f"Total CVEs Found: {total_cves}",
+        f"Highest Severity: {highest_severity}",
+        "",
+        "Loopback Findings (127.0.0.1)",
+    ]
+
+    for finding in findings["loopback"]:
+        lines.append(
+            f"Port: {finding['port']} | Protocol: {finding['protocol']} | "
+            f"Service: {finding['service'] or 'unknown'} | Version: {finding['version'] or 'unknown'}"
+        )
+        if not finding["cves"]:
+            lines.append("  No associated CVEs found.")
+            continue
+        for cve in finding["cves"]:
+            lines.extend(
+                [
+                    f"  CVE ID: {cve['id']}",
+                    f"    Severity: {cve['severity_label']}",
+                    f"    CVSS Score: {cve['cvss_score']}",
+                    f"    Description: {cve['description']}",
+                    f"    Remediation: {cve['remediation']}",
+                    f"    Reference URL: {cve['reference_url']}",
+                ]
+            )
+
+    lines.extend(["", "LAN Findings"])
+    for finding in findings["lan"]:
+        lines.append(
+            f"Port: {finding['port']} | Protocol: {finding['protocol']} | "
+            f"Service: {finding['service'] or 'unknown'} | Version: {finding['version'] or 'unknown'}"
+        )
+        if not finding["cves"]:
+            lines.append("  No associated CVEs found.")
+            continue
+        for cve in finding["cves"]:
+            lines.extend(
+                [
+                    f"  CVE ID: {cve['id']}",
+                    f"    Severity: {cve['severity_label']}",
+                    f"    CVSS Score: {cve['cvss_score']}",
+                    f"    Description: {cve['description']}",
+                    f"    Remediation: {cve['remediation']}",
+                    f"    Reference URL: {cve['reference_url']}",
+                ]
+            )
+
+    lines.extend(["", DISCLAIMER])
+    txt_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+    payload = {
+        "metadata": {
+            "tool_name": TOOL_NAME,
+            "version": TOOL_VERSION,
+            "scan_type": scan_type,
+            "timestamp": timestamp,
+            "target": "loopback and lan",
+            "total_ports_scanned": total_ports,
+            "total_cves_found": total_cves,
+        },
+        "findings": {
+            "loopback": findings["loopback"],
+            "lan": findings["lan"],
+        },
+    }
+    json_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
 
     print("Reports saved.")
     return txt_path, json_path
