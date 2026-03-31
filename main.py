@@ -194,10 +194,10 @@ def full_local_audit() -> None:
                 result["service"], result["version"]
             )
 
-    _print_audit_section("Loopback Findings (127.0.0.1)", audit_results.get("loopback", []), cve_matches["loopback"])
+    _print_audit_section("Loopback Findings (127.0.0.1)", audit_results.get("loopback", []), cve_matches["loopback"]) # type: ignore[attr-defined]
     lan_ip = scanner.get_lan_ip()
     lan_label = f"LAN Findings ({lan_ip})" if lan_ip else "LAN Findings"
-    _print_audit_section(lan_label, audit_results.get("lan", []), cve_matches["lan"])
+    _print_audit_section(lan_label, audit_results.get("lan", []), cve_matches["lan"]) # type: ignore[attr-defined]
 
     txt_path, json_path = reporter.generate_audit_report(
         audit_results, cve_matches, "Full Local Audit"

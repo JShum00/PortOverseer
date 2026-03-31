@@ -126,14 +126,14 @@ python main.py
 ```
 
 ### Main Menu
-
+![Main Menu of Port Overseer.](./assets/port-overseer-1.png)
 ```
 1. Quick Scan       — Scans top 1,000 common ports
 2. Full Scan        — Scans all 65,535 ports (slower)
-3. Full Local Audit — Scans all loopback and localhost LAN ports for a full audit.
-4. Custom Range     — Scans a user-defined port range
-5. Update Database  — Downloads latest CVE data from NVD
-6. Help             — Shows help and usage info
+3. Custom Range     — Scans a user-defined port range
+4. Update Database  — Downloads latest CVE data from NVD
+5. Help             — Shows help and usage info
+6. Full Local Audit — Scans all loopback and localhost LAN ports for a full audit.
 7. Exit
 ```
 
@@ -147,13 +147,16 @@ On first run, select **option 4** to download the CVE database before scanning. 
 
 ### Terminal (color-coded)
 
+![Screenshot of quick scan results.](./assets/port-overseer-2.png)
 ```
-Port 631 | Service: cups | Version: CUPS 2.4 | 3 CVEs found - highest: High
-  CVE-2023-32360 | Severity: High
-  CVE-2022-26691 | Severity: Medium
-  CVE-2023-34241 | Severity: Medium
+Scanning with Quick Scan...
+Scanning... done
+Port 631 | Service: ipp | Version: CUPS 2.4 | No known CVEs
+Generating reports...
+Reports saved.
 
-Port 22 | Service: ssh | Version: OpenSSH 8.9 | No known CVEs
+Report saved: /path/to/PortOverseer/reports/scan_20260330_234226.txt
+Report saved: /path/to/PortOverseer/reports/scan_20260330_234226.json
 ```
 
 ### Report files
@@ -170,22 +173,19 @@ reports/
 ```
 PORT OVERSEER
 Scan Type: Quick Scan
-Timestamp: 20260330_200352
-Total Ports Scanned: 3
+Timestamp: 20260330_225133
+Total Ports Scanned: 1
 
 Summary
-Total Open Ports: 3
-Total CVEs Found: 3
-Highest Severity: High
+Total Open Ports: 1
+Total CVEs Found: 0
+Highest Severity: None
 
 Findings
-Port: 631 | Protocol: tcp | Service: cups | Version: CUPS 2.4
-  CVE ID: CVE-2023-32360
-    Severity: High
-    CVSS Score: 7.5
-    Description: ...
-    Remediation: Refer to vendor advisory and apply available patches or mitigations.
-    Reference URL: https://nvd.nist.gov/vuln/detail/CVE-2023-32360
+Port: 631 | Protocol: tcp | Service: ipp | Version: CUPS 2.4
+  No associated CVEs found.
+
+This report is intended for authorized use only. Scan target: localhost (127.0.0.1)
 ```
 
 ---
@@ -200,6 +200,9 @@ port-overseer/
 ├── updater.py       # NVD data downloader with progress bar
 ├── reporter.py      # .txt and .json report generation
 ├── colors.py        # ANSI color output helpers
+├── assets/
+│   ├── port-overseer-1.png
+│   ├── port-overseer-2.png
 ├── data/
 │   ├── cve_db.sqlite          # Active CVE database
 │   └── cve_db_backup_*.sqlite # Automatic backups (up to 3)
@@ -216,7 +219,7 @@ port-overseer/
 LAN IP via Full Local Audit mode. Scanning external or third-party hosts is 
 intentionally unsupported.
 - **CVE database staleness** — The local database reflects NVD data at the time 
-of the last update. Run option 5 periodically to stay current.
+of the last update. Run option 4 periodically to stay current.
 - **Service matching accuracy** — CVE correlation depends on Nmap's service and 
 version detection. Unrecognized or generic service strings may return no CVE matches.
 
@@ -224,8 +227,6 @@ version detection. Unrecognized or generic service strings may return no CVE mat
 
 ## Planned Features
 
-- Full Local Audit mode — scans both localhost and the host's LAN IP for a complete picture
-- Progress indicator during CVE insertion
 - Pyinstaller builds
 
 ---
