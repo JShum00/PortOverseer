@@ -255,6 +255,16 @@ body {
   font-size: 0.85rem;
 }
 
+.full-product {
+  border-color: #6fa3ff;
+  color: #6fa3ff;
+  background: rgba(111, 163, 255, 0.08);
+}
+
+.full-product:hover:enabled {
+  background: rgba(111, 163, 255, 0.18);
+}
+
 @media (max-width: 1024px) {
   .layout { grid-template-columns: 1fr; }
   .terminal-screen { min-height: 62vh; }
