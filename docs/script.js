@@ -154,12 +154,12 @@ function renderReports(items, scanMode) {
 function openModal(fileName) {
   modalTitle.textContent = fileName;
   modalBody.textContent = reportsCache[fileName] || "No report data available.";
-  reportModal.classList.remove("hidden");
+  reportModal.classList.add("show");
   reportModal.setAttribute("aria-hidden", "false");
 }
 
 function closeModalView() {
-  reportModal.classList.add("hidden");
+  reportModal.classList.remove("show");
   reportModal.setAttribute("aria-hidden", "true");
 }
 
