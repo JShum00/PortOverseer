@@ -256,9 +256,13 @@ body {
 }
 
 .full-product {
-  border-color: #6fa3ff;
-  color: #6fa3ff;
-  background: rgba(111, 163, 255, 0.08);
+  display: inline-block;
+  text-decoration: none;
+}
+
+.full-product::before {
+  content: "➜ ";
+  color: var(--cyan);
 }
 
 .full-product:hover:enabled {
