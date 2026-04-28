@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Port Overseer | Terminal Demo</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="bg-grid" aria-hidden="true"></div>
+  <main class="layout">
+    <section class="terminal" aria-label="Port Overseer CLI emulator">
+      <header class="term-topbar">
+        <div class="window-dots" aria-hidden="true">
+          <span class="dot red"></span>
+          <span class="dot yellow"></span>
+          <span class="dot green"></span>
+        </div>
+        <p>port-overseer.py --demo --target 192.168.1.15</p>
+      </header>
+
+      <div class="terminal-screen" id="terminalScreen">
+<pre class="ascii">██████  ██████  ██████  ████████     ██████  ██    ██ ███████ ██████  ███████ ███████ ███████ ██████
+██   ██ ██  ██  ██   ██    ██       ██    ██ ██    ██ ██      ██   ██ ██      ██      ██      ██   ██
+██████  ██  ██  ██████     ██       ██    ██ ██    ██ █████   ██████  ███████ █████   █████   ██████
+██      ██  ██  ██  ██     ██       ██    ██  ██  ██  ██      ██   ██      ██ ██      ██      ██   ██
+██      ██████  ██   ██    ██        ██████    ████   ███████ ██   ██ ███████ ███████ ███████ ██   ██</pre>
+        <p class="subtitle">Vulnerability Hunt &amp; Scan // v1.0</p>
+
+        <div class="command-menu" id="menu">
+          <p class="line meta">$ choose_scan_profile</p>
+          <div class="btn-row">
+            <button class="scan-btn" data-scan="quick">Quick Scan</button>
+            <button class="scan-btn" data-scan="full">Full Scan</button>
+            <button class="scan-btn" data-scan="custom">Custom Range</button>
+          </div>
+        </div>
+
+        <div class="scan-meter" id="scanMeter" aria-live="polite">
+          <p class="meter-label"><span id="meterText">Idle</span></p>
+          <div class="meter-track"><span id="meterBar"></span></div>
+        </div>
+
+        <div id="output" class="output" role="log" aria-live="polite"></div>
+
+        <div id="postScanPrompt" class="prompt hidden">
+          <p class="line warn">$ Press Enter to return to menu...</p>
+          <button id="resetBtn" class="scan-btn soft">Return to Menu</button>
+        </div>
+      </div>
+    </section>
+
+    <section class="dashboard">
+      <article class="panel">
+        <h2>Live Findings</h2>
+        <p class="hint">Simulated discovery map from this demo run.</p>
+        <div id="resultsPanel" class="results empty">
+          <p>No scan run yet.</p>
+        </div>
+      </article>
+
+      <article class="panel">
+        <h2>Report Artifacts</h2>
+        <p class="hint">Open generated files inline.</p>
+        <div id="reports" class="reports empty">
+          <p>Artifacts appear after scan completion.</p>
+        </div>
+      </article>
+    </section>
+  </main>
+
+  <section id="reportModal" class="modal hidden" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="modalTitle">
+    <div class="modal-card">
+      <header>
+        <h3 id="modalTitle">Report</h3>
+        <button id="closeModal" aria-label="Close">✕</button>
+      </header>
+      <pre id="modalBody"></pre>
+    </div>
+  </section>
+
+  <script src="script.js"></script>
+</body>
+</html>
