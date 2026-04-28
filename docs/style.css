@@ -210,9 +210,13 @@ body {
   position: fixed;
   inset: 0;
   background: rgba(0, 0, 0, 0.76);
-  display: grid;
+  display: none;   /* 👈 key change */
   place-items: center;
   padding: 1rem;
+}
+
+.modal.show {
+  display: grid;
 }
 
 .modal-card {
