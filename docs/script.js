@@ -159,6 +159,8 @@ function openModal(fileName) {
 }
 
 function closeModalView() {
+  // Move focus OUT of modal first
+  document.body.focus();
   reportModal.classList.remove("show");
   reportModal.setAttribute("aria-hidden", "true");
 }
