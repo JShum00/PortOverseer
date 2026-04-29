@@ -89,7 +89,7 @@ function print(text, type = "low") {
   line.textContent = text;
 
   out.appendChild(line);
-  out.scrollTop = out.scrollHeight;
+  scrollToBottom();
 }
 
 
@@ -653,6 +653,15 @@ Vulnerability Hunt & Scan // v1.0
 
   out.appendChild(line);
   out.scrollTop = out.scrollHeight;
+}
+
+function scrollToBottom() {
+  const out = document.querySelector(".cli-output");
+
+  out.scrollTo({
+    top: out.scrollHeight,
+    behavior: "smooth"
+  });
 }
 
 
