@@ -1,63 +1,74 @@
-
-<div class="bg-grid" aria-hidden="true"></div>
-<main class="layout">
-  <section class="terminal" aria-label="Port Overseer CLI emulator">
-    <header class="term-topbar">
-      <div class="window-dots" aria-hidden="true">
-        <span class="dot red"></span>
-        <span class="dot yellow"></span>
-        <span class="dot green"></span>
-      </div>
-    </header>
-
-      <!-- MENU ASCII ART -->
-    <div class="terminal-screen" id="terminalScreen">
-        <pre class="ascii">
-                    _______    ______     _______  ___________
-                  |   __ "\  /    " \   /"      \("     _   ")
-                  (. |__) :)// ____  \ |:        |)__/  \\__/
-                  |:  ____//  /    ) :)|_____/   )   \\_ /
-                  (|  /   (: (____/ //  //      /    |.  |
-                  /|__/ \   \        /  |:  __   \    \:  |
-                (_______)   \"_____/   |__|  \___)    \__|
-
-______  ___      ___  _______   _______    ________  _______   _______   _______
-/    " \|"  \    /"  |/"     "| /"      \  /"       )/"     "| /"     "| /"      \
-// ____  \\   \  //  /(: ______)|:        |(:   \___/(: ______)(: ______)|:        |
-/  /    ) :)\\  \/. ./  \/    |  |_____/   ) \___  \   \/    |   \/    |  |_____/   )
-(: (____/ //  \.    //   // ___)_  //      /   __/  \\  // ___)_  // ___)_  //      /
-\        /    \\   /   (:      "||:  __   \  /" \   :)(:      "|(:      "||:  __   \
-\"_____/      \__/     \_______)|__|  \___)(_______/  \_______) \_______)|__|  \___)
-        </pre>
-
-      <!-- COMMAND MENU -->
-      <div class="command-menu" id="menu">
-          <pre class="cli-output">
-Vulnerability Hunt &amp; Scan // v1.0
-
-
-  1. Quick Scan
-  2. Full Scan
-  3. Custom Range
-  4. Update Database
-  5. Help
-  6. Full Local Audit
-  7. Exit
-          </pre>
-          <!-- REPL Prompt -->
-          <div class="cli-input-line">
-            <span class="prompt">Select an Option:</span>
-            <input type="text" id="userInput" autocomplete="off" maxlength="1" autofocus/>
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Port Overseer | Terminal Demo</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <div class="bg-grid" aria-hidden="true"></div>
+    <main class="layout">
+      <section class="terminal" aria-label="Port Overseer CLI emulator">
+        <header class="term-topbar">
+          <div class="window-dots" aria-hidden="true">
+            <span class="dot red"></span>
+            <span class="dot yellow"></span>
+            <span class="dot green"></span>
           </div>
-      </div>
-    </div>
-  </section>
-</main>
-
-<br />
-
-<span class="footer-bar">
-  <p>Made by: Johnny Shumway (jShum00). This is a demo, for the full product visit the github repo 
-      <a class="scan-btn full-product" id="fullProductBtn" href="https://github.com/JShum00/PortOverseer" target="_blank" rel="noopener noreferrer">Here</a>
-  </p>
-</span>
+        </header>
+    
+          <!-- MENU ASCII ART -->
+        <div class="terminal-screen" id="terminalScreen">
+            <pre class="ascii">
+                        _______    ______     _______  ___________
+                      |   __ "\  /    " \   /"      \("     _   ")
+                      (. |__) :)// ____  \ |:        |)__/  \\__/
+                      |:  ____//  /    ) :)|_____/   )   \\_ /
+                      (|  /   (: (____/ //  //      /    |.  |
+                      /|__/ \   \        /  |:  __   \    \:  |
+                    (_______)   \"_____/   |__|  \___)    \__|
+    
+    ______  ___      ___  _______   _______    ________  _______   _______   _______
+    /    " \|"  \    /"  |/"     "| /"      \  /"       )/"     "| /"     "| /"      \
+    // ____  \\   \  //  /(: ______)|:        |(:   \___/(: ______)(: ______)|:        |
+    /  /    ) :)\\  \/. ./  \/    |  |_____/   ) \___  \   \/    |   \/    |  |_____/   )
+    (: (____/ //  \.    //   // ___)_  //      /   __/  \\  // ___)_  // ___)_  //      /
+    \        /    \\   /   (:      "||:  __   \  /" \   :)(:      "|(:      "||:  __   \
+    \"_____/      \__/     \_______)|__|  \___)(_______/  \_______) \_______)|__|  \___)
+            </pre>
+    
+          <!-- COMMAND MENU -->
+          <div class="command-menu" id="menu">
+              <pre class="cli-output">
+    Vulnerability Hunt &amp; Scan // v1.0
+    
+    
+      1. Quick Scan
+      2. Full Scan
+      3. Custom Range
+      4. Update Database
+      5. Help
+      6. Full Local Audit
+      7. Exit
+              </pre>
+              <!-- REPL Prompt -->
+              <div class="cli-input-line">
+                <span class="prompt">Select an Option:</span>
+                <input type="text" id="userInput" autocomplete="off" maxlength="1" autofocus/>
+              </div>
+          </div>
+        </div>
+      </section>
+    </main>
+    
+    <br />
+    
+    <span class="footer-bar">
+      <p>Made by: Johnny Shumway (jShum00). This is a demo, for the full product visit the github repo 
+          <a class="scan-btn full-product" id="fullProductBtn" href="https://github.com/JShum00/PortOverseer" target="_blank" rel="noopener noreferrer">Here</a>
+      </p>
+    </span>
+    <script src="script.js"></script>
+  </body>
+</html>
