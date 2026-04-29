@@ -461,6 +461,97 @@ const Engine = {
 
     Engine.unlock();
   },
+  audit: {
+    async run(portRange = null) {
+      Engine.lock();
+  
+      print("Starting Full Local Audit...", "system");
+      await delay(600);
+  
+      // LOOPBACK scan always runs
+      print("\n[LOOPBACK] Scanning 127.0.0.1...", "system");
+      await delay(800);
+      await spinner("Scanning loopback", 1200);
+  
+      const loopbackResults = fakePorts(5, 10);
+  
+      print("Loopback scan complete.\n", "dim");
+  
+      // simulate LAN detection
+      const lanDetected = Math.random() > 0.2; // 80% chance LAN exists
+  
+      let lanResults = [];
+  
+      if (!lanDetected) {
+        print(
+          "Warning: Could not determine LAN IP. Proceeding with loopback only.",
+          "dim"
+        );
+      } else {
+        const lanIP = fakeLANIP();
+  
+        print(`\n[LAN] Scanning ${lanIP}...`, "system");
+        await delay(900);
+        await spinner("Scanning LAN", 1500);
+  
+        lanResults = fakePorts(6, 12);
+  
+        print("LAN scan complete.\n", "dim");
+      }
+  
+      // OUTPUT SECTION (formatted like your full scan)
+      this.renderAuditSection("Loopback Findings (127.0.0.1)", loopbackResults);
+  
+      if (lanDetected) {
+        this.renderAuditSection("LAN Findings", lanResults);
+      }
+  
+      print("\nGenerating audit reports...", "system");
+      await delay(900);
+  
+      print("Report saved: /reports/audit_loopback.txt", "dim");
+      print("Report saved: /reports/audit_lan.txt", "dim");
+      print("Report saved: /reports/audit.json", "dim");
+  
+      Engine.unlock();
+      returnToMenu();
+    },
+  
+    renderAuditSection(label, results) {
+      print(`\n${label}`, "system");
+  
+      for (const r of results) {
+        const hasCVEs = Math.random() < 0.4;
+  
+        if (!hasCVEs) {
+          print(
+            `Port ${r.port} | Service: ${r.service} | Version: ${r.version} | No known CVEs`,
+            "clean"
+          );
+          continue;
+        }
+  
+        const severityPool = ["Low", "Medium", "High", "Critical"];
+        const severity =
+          severityPool[Math.floor(Math.random() * severityPool.length)];
+  
+        const cveCount = Math.floor(3 + Math.random() * 12);
+  
+        print(
+          `Port ${r.port} | Service: ${r.service} | Version: ${r.version} | ${cveCount} CVEs found - highest: ${severity}`,
+          severity.toLowerCase()
+        );
+  
+        for (let i = 0; i < cveCount; i++) {
+          const id = `CVE-${1999 + Math.floor(Math.random() * 6)}-${Math.floor(
+            1000 + Math.random() * 9000
+          )}`;
+  
+          print(`    ${id} | Severity: ${severity}`, severity.toLowerCase());
+        }
+      }
+    },
+  },
 };
 
 
