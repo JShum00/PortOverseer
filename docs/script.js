@@ -1,229 +1,575 @@
-const output = document.getElementById("output");
-const scanButtons = document.querySelectorAll(".scan-btn[data-scan]");
-const resultsPanel = document.getElementById("resultsPanel");
-const reports = document.getElementById("reports");
-const postScanPrompt = document.getElementById("postScanPrompt");
-const resetBtn = document.getElementById("resetBtn");
-const terminalScreen = document.getElementById("terminalScreen");
-const meterText = document.getElementById("meterText");
-const meterBar = document.getElementById("meterBar");
+/**********************
+ *  CLI CORE
+ **********************/
+const CLI = {
+  state: "menu",
+  busy: false,
+  resumeHandler: null,
 
-const reportModal = document.getElementById("reportModal");
-const modalTitle = document.getElementById("modalTitle");
-const modalBody = document.getElementById("modalBody");
-const closeModal = document.getElementById("closeModal");
+  async run(input) {
+    if (this.resumeHandler) {
+      const handler = this.resumeHandler;
+      this.resumeHandler = null;
+      handler();
+      return;
+    }
+    if (this.busy) {
+      print("[SYSTEM] Busy. Please wait...", "dim");
+      return;
+    }
 
-let isScanning = false;
-let reportsCache = {};
+    this.busy = true;
 
-const sampleResults = {
-  quick: [
-    { port: 631, service: "ipp", version: "CUPS 2.4", severity: "None", cve: "No known CVEs" }
-  ],
-  full: [
-    { port: 22, service: "ssh", version: "OpenSSH 9.3", severity: "Low", cve: "CVE-2023-38408" },
-    { port: 80, service: "http", version: "nginx 1.24", severity: "Medium", cve: "CVE-2024-32760" },
-    { port: 443, service: "https", version: "OpenSSL 3.0.2", severity: "High", cve: "CVE-2023-5363" },
-    { port: 3306, service: "mysql", version: "MySQL 8.0", severity: "Critical", cve: "CVE-2024-21096" }
-  ],
-  custom: [
-    { port: 53, service: "dns", version: "BIND 9.18", severity: "Low", cve: "CVE-2023-50387" },
-    { port: 443, service: "https", version: "OpenSSL 3.0.2", severity: "High", cve: "CVE-2023-5363" },
-    { port: 631, service: "ipp", version: "CUPS 2.4", severity: "None", cve: "No known CVEs" }
-  ]
+    print(`> ${input}`, "system");
+
+    try {
+      switch (input) {
+        case "1":
+          await Engine.scan.quick();
+          break;
+        case "2":
+          await Engine.scan.full();
+          break;
+        case "3":
+          await Engine.scan.custom();
+          break;
+        case "4":
+          await Engine.update.database();
+          break;
+        case "5":
+          await Engine.help();
+          break;
+        case "6":
+          await Engine.audit();
+          break;
+        case "7":
+          await Engine.exit();
+          break;
+        default:
+          Engine.invalid();
+      }
+    } catch (err) {
+      print(`[ERROR] ${err.message}`, "critical");
+      console.error(err);
+    }
+
+    this.busy = false;
+  },
 };
 
-const sequences = {
-  quick: [
-    { text: "[INFO] Scanning with Quick Scan...", cls: "meta", progress: 15 },
-    { text: "[INFO] Checking common service ports (top 100)", cls: "info", progress: 45 },
-    { text: "[OK] Scanning... done", cls: "success", progress: 75 },
-    { text: "[PORT] Port 631 | Service: ipp | Version: CUPS 2.4 | No known CVEs", cls: "success", progress: 90 },
-    { text: "[REPORT] Generating reports...", cls: "warn", progress: 98 },
-    { text: "[OK] Reports saved.", cls: "success", progress: 100 }
-  ],
-  full: [
-    { text: "[INFO] Scanning with Full Scan...", cls: "meta", progress: 7 },
-    { text: "[INFO] Port sweep started for range 1-65535", cls: "info", progress: 33 },
-    { text: "[INFO] Fingerprinting discovered services", cls: "info", progress: 59 },
-    { text: "[WARN] High-risk signatures found", cls: "warn", progress: 78 },
-    { text: "[OK] Scanning... done", cls: "success", progress: 90 },
-    { text: "[REPORT] Generating reports...", cls: "warn", progress: 97 },
-    { text: "[OK] Reports saved.", cls: "success", progress: 100 }
-  ],
-  custom: [
-    { text: "[INFO] Scanning with Custom Range...", cls: "meta", progress: 14 },
-    { text: "[INFO] Simulated custom profile: ports 20-1024", cls: "info", progress: 52 },
-    { text: "[OK] Scanning... done", cls: "success", progress: 80 },
-    { text: "[REPORT] Generating reports...", cls: "warn", progress: 96 },
-    { text: "[OK] Reports saved.", cls: "success", progress: 100 }
-  ]
+
+/**********************
+ *  UI STATE
+ **********************/
+const UI = {
+  statusLine: null,
+  progressLine: null,
 };
 
-const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
-function setButtons(disabled) {
-  scanButtons.forEach((button) => {
-    button.disabled = disabled;
-  });
-}
+/**********************
+ *  OUTPUT SYSTEM
+ **********************/
+function print(text, type = "low") {
+  const out = document.querySelector(".cli-output");
 
-function setMeter(progress, label) {
-  meterBar.style.width = `${progress}%`;
-  meterText.textContent = `${label} (${progress}%)`;
-}
+  const line = document.createElement("div");
 
-async function typeLine(text, cls = "info") {
-  const line = document.createElement("p");
-  line.className = `line ${cls}`;
-  line.textContent = "";
-  output.appendChild(line);
-
-  for (const ch of text) {
-    line.textContent += ch;
-    terminalScreen.scrollTop = terminalScreen.scrollHeight;
-    await sleep(12);
-  }
-
-  line.classList.add("complete");
-  await sleep(140);
-}
-
-function badgeClass(level) {
-  return `badge-${level.toLowerCase()}`;
-}
-
-function renderResults(items) {
-  resultsPanel.innerHTML = "";
-  resultsPanel.classList.remove("empty");
-
-  items.forEach((item) => {
-    const el = document.createElement("article");
-    el.className = "finding";
-    el.innerHTML = `
-      <p class="line"><strong>Port:</strong> ${item.port}</p>
-      <p class="line"><strong>Service:</strong> ${item.service}</p>
-      <p class="line"><strong>Version:</strong> ${item.version}</p>
-      <p class="line"><strong>CVE:</strong> ${item.cve}</p>
-      <p class="line"><strong>Severity:</strong> <span class="badge ${badgeClass(item.severity)}">${item.severity}</span></p>
-    `;
-    resultsPanel.appendChild(el);
-  });
-}
-
-function getTimestamp() {
-  const now = new Date();
-  const pad = (n) => String(n).padStart(2, "0");
-  return `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}_${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`;
-}
-
-function renderReports(items, scanMode) {
-  const timestamp = getTimestamp();
-  const txtName = `scan_${timestamp}.txt`;
-  const jsonName = `scan_${timestamp}.json`;
-
-  reportsCache = {
-    [txtName]: [
-      "PORT OVERSEER REPORT",
-      `Mode: ${scanMode.toUpperCase()}`,
-      `Generated: ${timestamp}`,
-      "",
-      ...items.map((i) => `- ${i.port}/tcp ${i.service} ${i.version} | ${i.cve} | ${i.severity.toUpperCase()}`)
-    ].join("\n"),
-    [jsonName]: JSON.stringify({
-      mode: scanMode,
-      generated_at: timestamp,
-      host: "demo-target.local",
-      findings: items
-    }, null, 2)
+  const map = {
+    critical: "cli-critical",
+    high: "cli-high",
+    medium: "cli-medium",
+    low: "cli-low",
+    clean: "cli-clean",
+    dim: "cli-dim",
+    system: "cli-system",
   };
 
-  reports.classList.remove("empty");
-  reports.innerHTML = "";
+  line.className = map[type] || "cli-low";
+  line.textContent = text;
 
-  Object.keys(reportsCache).forEach((fileName) => {
-    const btn = document.createElement("button");
-    btn.type = "button";
-    btn.className = "report-link";
-    btn.textContent = fileName;
-    btn.addEventListener("click", () => openModal(fileName));
-    reports.appendChild(btn);
+  out.appendChild(line);
+  out.scrollTop = out.scrollHeight;
+}
+
+
+/**********************
+ *  STATUS + PROGRESS
+ **********************/
+function setStatus(text) {
+  const out = document.querySelector(".cli-output");
+
+  if (!UI.statusLine) {
+    UI.statusLine = document.createElement("div");
+    UI.statusLine.className = "cli-system";
+    UI.statusLine.style.opacity = "0.9";
+    out.appendChild(UI.statusLine);
+  }
+
+  UI.statusLine.textContent = text;
+  out.scrollTop = out.scrollHeight;
+}
+
+function renderProgress(label, current, total) {
+  const width = 30;
+
+  const percent = Math.floor((current / total) * 100);
+  const filled = Math.floor((current / total) * width);
+
+  const bar = "█".repeat(filled) + "░".repeat(width - filled);
+
+  const text = `${label} [${bar}] ${percent}%`;
+
+  const out = document.querySelector(".cli-output");
+
+  if (!UI.progressLine) {
+    UI.progressLine = document.createElement("div");
+    UI.progressLine.className = "cli-system";
+    out.appendChild(UI.progressLine);
+  }
+
+  UI.progressLine.textContent = text;
+  out.scrollTop = out.scrollHeight;
+}
+
+/**********************
+ *  ENGINE LAYER
+ **********************/
+const Engine = {
+  invalid() {
+    print("[SYSTEM] Invalid selection.", "dim");
+    returnToMenu();
+  },
+
+  lock() {
+    CLI.busy = true;
+  },
+
+  unlock() {
+    CLI.busy = false;
+  },
+
+  exit() {
+    print("[SYSTEM] Exiting Port Overseer...", "system");
+
+    setTimeout(() => {
+      window.open("", "_self");
+      window.close();
+
+      // fallback if browser blocks it
+      document.body.innerHTML = `
+        <div style="color:#7f95aa;font-family:monospace;padding:20px;">
+          Session terminated.<br><br>
+          You may now close this tab.
+        </div>
+      `;
+    }, 500);
+  },
+
+  scan: {
+    async quick() {
+      Engine.lock();
+
+      print("Scanning with Quick Scan...", "system");
+      await delay(700);
+
+      await spinner("Scanning", 1200);
+      print("Scanning... done", "dim");
+
+      const results = fakePorts(3, 6);
+
+      for (const r of results) {
+        print(
+          `Port ${r.port} | Service: ${r.service} | Version: ${r.version} | No known CVEs`,
+          "clean"
+        );
+        await delay(180);
+      }
+
+      print("\nGenerating Reports...", "system");
+      await delay(900);
+
+      print("Reports saved.", "dim");
+      print("Report Saved: /reports/quick_scan.txt", "dim");
+      print("Report Saved: /reports/quick_scan.json", "dim");
+
+      await delay(500);
+
+      Engine.unlock();
+    },
+
+    async full() {
+      Engine.lock();
+      print("Scanning with Full Scan...", "system");
+      await delay(700);
+
+      await spinner("Scanning", 2500);
+      print("Scanning... done", "dim");
+
+      await delay(400);
+
+      const results = fakePorts(8, 15);
+
+      for (const r of results) {
+        const hasCVEs = Math.random() < 0.4; // simulate vulnerability chance
+
+        if (!hasCVEs) {
+          print(
+            `Port ${r.port} | Service: ${r.service} | Version: ${r.version} | No known CVEs`,
+            "clean"
+          );
+          await delay(180);
+          continue;
+        }
+
+        const severityPool = ["Low", "Medium", "High", "Critical"];
+        const severity =
+          severityPool[Math.floor(Math.random() * severityPool.length)];
+
+        const cveCount = Math.floor(5 + Math.random() * 15);
+
+        print(
+          `Port ${r.port} | Service: ${r.service} | Version: ${r.version} | ${cveCount} CVEs found - highest: ${severity}`,
+          severity.toLowerCase()
+        );
+
+        await delay(120);
+
+        // generate CVE list
+        for (let i = 0; i < cveCount; i++) {
+          const year = 1999 + Math.floor(Math.random() * 5);
+          const id =
+            `CVE-${year}-${Math.floor(1000 + Math.random() * 9000)}`;
+
+          print(
+            `    ${id} | Severity: ${severity}`,
+            severity.toLowerCase()
+          );
+
+          await delay(60);
+        }
+
+        await delay(200);
+      }
+
+      print("\nGenerating Reports...", "system");
+      await delay(900);
+
+      print("Reports Saved.", "dim");
+
+      print("Report saved: /reports/full_scan.txt", "dim");
+      print("Report saved: /reports/full_scan.json", "dim");
+
+      await delay(500);
+
+      Engine.unlock();
+    },
+
+    async custom() {
+      Engine.lock();
+
+      print("Custom Scan selected.", "system");
+      await delay(500);
+
+      const start = Math.floor(20 + Math.random() * 200);
+      const end = start + Math.floor(50 + Math.random() * 500);
+
+      print(`Scanning port range ${start}-${end}...`, "system");
+      await delay(800);
+
+      await spinner("Scanning custom range", 2000);
+
+      const results = fakePorts(4, 10);
+
+      print("Scan complete.", "dim");
+      await delay(300);
+
+      for (const r of results) {
+        const hasCVEs = Math.random() < 0.35;
+
+        if (!hasCVEs) {
+          print(
+            `Port ${r.port} | Service: ${r.service} | Version: ${r.version} | No known CVEs`,
+            "clean"
+          );
+          await delay(150);
+          continue;
+        }
+
+        const severityPool = ["Low", "Medium", "High", "Critical"];
+        const severity =
+          severityPool[Math.floor(Math.random() * severityPool.length)];
+
+        const cveCount = Math.floor(3 + Math.random() * 12);
+
+        print(
+          `Port ${r.port} | Service: ${r.service} | Version: ${r.version} | ${cveCount} CVEs found - highest: ${severity}`,
+          severity.toLowerCase()
+        );
+
+        for (let i = 0; i < cveCount; i++) {
+          const id = `CVE-${1999 + Math.floor(Math.random() * 6)}-${Math.floor(
+            1000 + Math.random() * 9000
+          )}`;
+
+          print(`    ${id} | Severity: ${severity}`, severity.toLowerCase());
+          await delay(50);
+        }
+
+        await delay(120);
+      }
+
+      print("\nGenerating Reports...", "system");
+      await delay(700);
+
+      print("Reports Saved.", "dim");
+      print("Report saved: /reports/custom_scan.txt", "dim");
+      print("Report saved: /reports/custom_scan.json", "dim");
+
+      Engine.unlock();
+    }
+  },
+
+  update: {
+    async database() {
+      Engine.lock();
+
+      print("[SYSTEM] Initializing updater module...", "system");
+      await delay(700);
+
+      print("[DB] Checking last update timestamp...", "system");
+      await delay(800);
+
+      const incremental = Math.random() > 0.5;
+
+      print(
+        incremental
+          ? "[DB] Incremental update detected."
+          : "[DB] No previous data found. Full update required.",
+        "system"
+      );
+
+      await delay(900);
+
+      print("[BACKUP] Rotating database backups...", "system");
+      await delay(900);
+
+      print("[INIT] Initializing SQLite layer...", "system");
+      await delay(800);
+
+      print("\n[DOWNLOAD] Connecting to NVD API...", "system");
+      await delay(900);
+
+      const total = 12;
+
+      for (let i = 1; i <= total; i++) {
+        renderProgress("Downloading CVEs...", i, total);
+        await delay(250 + Math.random() * 300);
+      }
+
+      print("\n[PARSER] Processing vulnerability records...", "system");
+      await delay(900);
+
+      const inserted = Math.floor(total * 0.85);
+      const skipped = total - inserted;
+
+      for (let i = 1; i <= inserted; i++) {
+        renderProgress("Inserting CVEs...", i, inserted);
+        await delay(120);
+      }
+
+      print("\n[WRITE] Committing database transaction...", "system");
+      await delay(800);
+
+      print("[WRITE] Updating last_updated timestamp...", "system");
+      await delay(600);
+
+      print("\nSelect an Option:", "system");
+      print(`Total fetched: ${total}`, "dim");
+      print(`Total inserted: ${inserted}`, "dim");
+      print(`Total skipped: ${skipped}`, "dim");
+
+      Engine.unlock();
+    },
+  },
+
+  help: async function () {
+    Engine.lock();
+
+    const out = document.querySelector(".cli-output");
+    out.innerHTML = "";
+
+    print("PORT OVERSEER // HELP", "system");
+    await delay(400);
+
+    print("\nCOMMAND REFERENCE\n", "system");
+
+    print("1. Quick Scan", "clean");
+    print("   Scan top 1,000 common localhost ports, detect services,", "dim");
+    print("   match CVEs, and generate reports (TXT + JSON).", "dim");
+
+    await delay(200);
+
+    print("\n2. Full Scan", "clean");
+    print("   Scan all 65,535 localhost ports with service detection,", "dim");
+    print("   CVE lookup enabled. May take several minutes.", "dim");
+
+    await delay(200);
+
+    print("\n3. Custom Range", "clean");
+    print("   Scan user-defined port range with CVE correlation.", "dim");
+
+    await delay(200);
+
+    print("\n4. Update Database", "clean");
+    print("   Fetch latest NVD CVE dataset and refresh local SQLite DB.", "dim");
+
+    await delay(200);
+
+    print("\n5. Help", "clean");
+    print("   Display this help screen.", "dim");
+
+    await delay(200);
+
+    print("\n6. Full Local Audit", "clean");
+    print("   Scan localhost + LAN interface, generate separate reports.", "dim");
+
+    await delay(200);
+
+    print("\n7. Exit", "clean");
+    print("   Close Port Overseer session.", "dim");
+
+    await delay(400);
+
+    print("\nPRIVILEGE REQUIREMENTS", "system");
+    print("- Windows: Run as Administrator", "dim");
+    print("- Linux: Run as root (sudo)", "dim");
+    print("- Elevated privileges required for all scans & DB actions", "dim");
+
+    await delay(300);
+
+    print("\nOUTPUT DIRECTORY", "system");
+    print("/reports/", "clean");
+
+    await delay(500);
+
+    print("\nPress Enter to return to the main menu...", "system");
+
+    CLI.resumeHandler = () => {
+      renderMenu();
+    };
+
+    Engine.unlock();
+  },
+};
+
+
+/**********************
+ *  UTILITIES
+ **********************/
+function fakePorts(min, max) {
+  const basePorts = [
+    {
+      port: 22,
+      service: "ssh",
+      versions: ["OpenSSH 9.3", "OpenSSH 8.9"]
+    },
+    {
+      port: 80,
+      service: "http",
+      versions: ["nginx 1.24", "Apache 2.4.58"]
+    },
+    {
+      port: 443,
+      service: "https",
+      versions: ["nginx 1.24 (SSL)", "Apache 2.4.58 (OpenSSL)"]
+    },
+    {
+      port: 631,
+      service: "ipp",
+      versions: ["CUPS 2.4", "CUPS 2.3"]
+    },
+  ];
+
+  const count = Math.floor(min + Math.random() * (max - min));
+  const shuffled = basePorts.sort(() => Math.random() - 0.5);
+
+  return shuffled.slice(0, count).map((p) => {
+    const version =
+      p.versions[Math.floor(Math.random() * p.versions.length)];
+
+    return {
+      port: p.port,
+      service: p.service,
+      version,
+    };
   });
 }
 
-function openModal(fileName) {
-  modalTitle.textContent = fileName;
-  modalBody.textContent = reportsCache[fileName] || "No report data available.";
-  reportModal.classList.add("show");
-  reportModal.setAttribute("aria-hidden", "false");
-}
+async function spinner(message, duration = 2000) {
+  const frames = ["|", "/", "-", "\\"];
+  let i = 0;
+  const start = Date.now();
 
-function closeModalView() {
-  // Move focus OUT of modal first
-  document.body.focus();
-  reportModal.classList.remove("show");
-  reportModal.setAttribute("aria-hidden", "true");
-}
-
-async function runScan(mode) {
-  if (isScanning) {
-    await typeLine("[WARN] A scan is already running. Wait for completion.", "warn");
-    return;
+  while (Date.now() - start < duration) {
+    setStatus(`${message} ${frames[i % frames.length]}`);
+    i++;
+    await delay(100);
   }
 
-  isScanning = true;
-  setButtons(true);
-  postScanPrompt.classList.add("hidden");
-  output.innerHTML = "";
-  resultsPanel.classList.add("empty");
-  resultsPanel.innerHTML = "<p>Scan in progress...</p>";
-  reports.classList.add("empty");
-  reports.innerHTML = "<p>Generating artifact previews...</p>";
-  setMeter(0, "Running");
-
-  const flow = sequences[mode] || sequences.quick;
-  for (const step of flow) {
-    await typeLine(step.text, step.cls);
-    setMeter(step.progress, "Running");
-    await sleep(120);
-  }
-
-  const findings = sampleResults[mode] || sampleResults.quick;
-  renderResults(findings);
-  renderReports(findings, mode);
-
-  await typeLine("[PROMPT] Press Enter to return to menu.", "warn");
-  postScanPrompt.classList.remove("hidden");
-  setMeter(100, "Completed");
-  isScanning = false;
-  setButtons(false);
+  setStatus(`${message} done`);
 }
 
-function resetToMenu() {
-  output.innerHTML = "";
-  postScanPrompt.classList.add("hidden");
-  setMeter(0, "Idle");
-  typeLine("[INFO] Main menu restored. Select scan profile.", "info");
+function delay(ms) {
+  return new Promise((r) => setTimeout(r, ms));
 }
 
-scanButtons.forEach((button) => {
-  button.addEventListener("click", () => runScan(button.dataset.scan));
-});
+function renderMenu() {
+  const out = document.querySelector(".cli-output");
+  out.innerHTML = "";
 
-resetBtn.addEventListener("click", resetToMenu);
-closeModal.addEventListener("click", closeModalView);
+  printMenu();
+}
 
-window.addEventListener("keydown", (event) => {
-  if (event.key === "Enter" && !isScanning && !postScanPrompt.classList.contains("hidden")) {
-    resetToMenu();
-  }
-  if (event.key === "Escape") {
-    closeModalView();
-  }
-});
+function printMenu() {
+  const menu = `
+Vulnerability Hunt & Scan // v1.0
 
-reportModal.addEventListener("click", (event) => {
-  if (event.target === reportModal) {
-    closeModalView();
+
+  1. Quick Scan
+  2. Full Scan
+  3. Custom Range
+  4. Update Database
+  5. Help
+  6. Full Local Audit
+  7. Exit
+`;
+
+  const out = document.querySelector(".cli-output");
+  const line = document.createElement("div");
+
+  line.className = "cli-output cli-system";
+  line.textContent = menu;
+
+  out.appendChild(line);
+  out.scrollTop = out.scrollHeight;
+}
+
+
+/**********************
+ *  INPUT HANDLER
+ **********************/
+const input = document.getElementById("userInput");
+
+input.addEventListener("keydown", async (e) => {
+  if (e.key === "Enter") {
+    try {
+      const value = input.value.trim();
+      input.value = "";
+
+      await CLI.run(value);
+    } catch (err) {
+      print(`[ERROR] ${err.message}`, "critical");
+    }
   }
 });
