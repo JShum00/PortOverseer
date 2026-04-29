@@ -511,9 +511,16 @@ const Engine = {
       print("Report saved: /reports/audit_lan.txt", "dim");
       print("Report saved: /reports/audit.json", "dim");
   
+      await delay(500);
+  
+      print("\nPress Enter to return to the main menu...", "system");
+  
+      CLI.resumeHandler = () => {
+        renderMenu();
+      };
+  
       Engine.unlock();
-      renderMenu();
-    },
+      },
   
     renderAuditSection(label, results) {
       print(`\n${label}`, "system");
