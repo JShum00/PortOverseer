@@ -138,7 +138,7 @@ function renderProgress(label, current, total) {
 const Engine = {
   invalid() {
     print("[SYSTEM] Invalid selection.", "dim");
-    returnToMenu();
+    renderMenu();
   },
 
   lock() {
@@ -512,7 +512,7 @@ const Engine = {
       print("Report saved: /reports/audit.json", "dim");
   
       Engine.unlock();
-      returnToMenu();
+      renderMenu();
     },
   
     renderAuditSection(label, results) {
