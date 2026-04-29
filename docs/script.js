@@ -556,6 +556,10 @@ const Engine = {
 /**********************
  *  UTILITIES
  **********************/
+function fakeLANIP() {
+  return `192.168.1.${Math.floor(2 + Math.random() * 200)}`;
+}
+
 function fakePorts(min, max) {
   const basePorts = [
     {
