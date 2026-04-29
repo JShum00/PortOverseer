@@ -461,7 +461,7 @@ const Engine = {
 
     Engine.unlock();
   },
-  audit: {
+  audit: async function () {
     async run(portRange = null) {
       Engine.lock();
   
