@@ -461,14 +461,14 @@ const Engine = {
 
     Engine.unlock();
   },
-  audit: async function () {
+
+  audit: {
     async run(portRange = null) {
       Engine.lock();
   
       print("Starting Full Local Audit...", "system");
       await delay(600);
   
-      // LOOPBACK scan always runs
       print("\n[LOOPBACK] Scanning 127.0.0.1...", "system");
       await delay(800);
       await spinner("Scanning loopback", 1200);
@@ -477,8 +477,7 @@ const Engine = {
   
       print("Loopback scan complete.\n", "dim");
   
-      // simulate LAN detection
-      const lanDetected = Math.random() > 0.2; // 80% chance LAN exists
+      const lanDetected = Math.random() > 0.2;
   
       let lanResults = [];
   
@@ -499,7 +498,6 @@ const Engine = {
         print("LAN scan complete.\n", "dim");
       }
   
-      // OUTPUT SECTION (formatted like your full scan)
       this.renderAuditSection("Loopback Findings (127.0.0.1)", loopbackResults);
   
       if (lanDetected) {
