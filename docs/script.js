@@ -40,7 +40,7 @@ const CLI = {
           await Engine.help();
           break;
         case "6":
-          await Engine.audit();
+          await Engine.audit.run();
           break;
         case "7":
           await Engine.exit();
