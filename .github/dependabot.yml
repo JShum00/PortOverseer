@@ -1,0 +1,23 @@
+version: 2
+
+updates:
+  # 🐍 Python dependencies (pip)
+  - package-ecosystem: "pip"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 3
+
+    # 🧠 Group updates so you don't get 3 separate PRs for tiny libs
+    groups:
+      python-dependencies:
+        patterns:
+          - "*"
+
+  # ⚙️ GitHub Actions (optional but recommended)
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 2
