@@ -41,17 +41,31 @@ def _highest_severity(cve_list: list[dict]) -> str:
     return highest
 
 
-def print_finding(port: int, service: str, version: str, cve_list: list[dict]) -> None:
+def print_finding(
+    port: int,
+    service: str,
+    version: str,
+    cve_list: list[dict],
+    *,
+    correlation_verified: bool = True,
+) -> None:
     """Print a color-coded summary for one open port and its CVEs."""
     service_text = service or "unknown"
     version_text = version or "unknown"
 
     if not cve_list:
-        summary = (
-            f"Port {port} | Service: {service_text} | Version: {version_text} | "
-            "No known CVEs"
-        )
-        print(colorize(summary, CLEAN))
+        if not correlation_verified:
+            summary = (
+                f"Port {port} | Service: {service_text} | Version: {version_text} | "
+                "CVE analysis unavailable - product/version not identified"
+            )
+            print(colorize(summary, MEDIUM))
+        else:
+            summary = (
+                f"Port {port} | Service: {service_text} | Version: {version_text} | "
+                "No known CVEs"
+            )
+            print(colorize(summary, CLEAN))
         return
 
     highest = _highest_severity(cve_list)

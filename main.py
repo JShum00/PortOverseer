@@ -160,8 +160,18 @@ def _run_scan(scan_func, scan_type: str) -> None:
     for result in scan_results:
         port = int(result["port"])
         matches = cve_lookup.lookup_cves(result["service"], result["version"])
+        correlation_verified = cve_lookup.can_correlate_cves(
+            str(result.get("service", "")),
+            str(result.get("version", "")),
+        )
         cve_matches[port] = matches
-        colors.print_finding(port, result["service"], result["version"], matches)
+        colors.print_finding(
+            port,
+            result["service"],
+            result["version"],
+            matches,
+            correlation_verified=correlation_verified,
+        )
 
     txt_path, json_path = reporter.generate_report(scan_results, cve_matches, scan_type)
     print(f"\nReport saved: {txt_path}")
@@ -181,6 +191,10 @@ def _print_audit_section(label: str, results: list[dict], match_map: dict[int, l
             result["service"],
             result["version"],
             match_map.get(port, []),
+            correlation_verified=cve_lookup.can_correlate_cves(
+                str(result.get("service", "")),
+                str(result.get("version", "")),
+            ),
         )
 
 

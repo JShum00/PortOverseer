@@ -20,6 +20,8 @@ SERVICE_ALIASES = {
     "http": "nodejs",
 }
 
+UNKNOWN_TOKENS = {"", "unknown", "unidentified", "none", "n/a"}
+
 
 def initialize_db() -> None:
     """Create the local CVE database and schema if they do not exist yet."""
@@ -56,8 +58,24 @@ def get_severity_label(cvss_score: float) -> str:
     return "Low"
 
 
+def can_correlate_cves(service: str, version: str) -> bool:
+    """Return True only when both service and version are identified enough to correlate CVEs."""
+    normalized_service = service.strip().lower()
+    normalized_version = version.strip().lower()
+
+    if normalized_service in UNKNOWN_TOKENS:
+        return False
+    if normalized_version in UNKNOWN_TOKENS:
+        return False
+
+    return True
+
+
 def lookup_cves(service: str, version: str) -> list[dict]:
     """Return CVEs whose descriptions partially match the service and version inputs."""
+    if not can_correlate_cves(service, version):
+        return []
+
     if not DB_PATH.exists():
         return []
 

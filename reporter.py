@@ -6,6 +6,8 @@ import json
 from datetime import datetime
 from pathlib import Path
 
+import cve_lookup
+
 
 PROJECT_ROOT = Path(__file__).resolve().parent
 REPORTS_DIR = PROJECT_ROOT / "reports"
@@ -39,13 +41,20 @@ def _build_findings(scan_results: list[dict], cve_matches: dict[int, list[dict]]
     for result in scan_results:
         port = int(result.get("port", 0))
         matches = cve_matches.get(port, [])
+        service = str(result.get("service", ""))
+        version = str(result.get("version", ""))
+        can_correlate = cve_lookup.can_correlate_cves(service, version)
         findings.append(
             {
                 "port": port,
                 "protocol": str(result.get("protocol", "")),
-                "service": str(result.get("service", "")),
-                "version": str(result.get("version", "")),
+                "service": service,
+                "version": version,
                 "state": str(result.get("state", "")),
+                "cve_analysis_status": "confirmed" if can_correlate else "unverified",
+                "cve_analysis_note": (
+                    "" if can_correlate else "CVE analysis unavailable - product/version not identified."
+                ),
                 "cves": [
                     {
                         "id": str(cve.get("id", "")),
@@ -114,7 +123,10 @@ def _write_text_report(
         )
 
         if not finding["cves"]:
-            lines.append("  No associated CVEs found.")
+            if finding.get("cve_analysis_status") == "unverified":
+                lines.append("  CVE analysis unavailable - product/version not identified.")
+            else:
+                lines.append("  No associated CVEs found.")
             continue
 
         for cve in finding["cves"]:
@@ -238,7 +250,10 @@ def generate_audit_report(
             f"Service: {finding['service'] or 'unknown'} | Version: {finding['version'] or 'unknown'}"
         )
         if not finding["cves"]:
-            lines.append("  No associated CVEs found.")
+            if finding.get("cve_analysis_status") == "unverified":
+                lines.append("  CVE analysis unavailable - product/version not identified.")
+            else:
+                lines.append("  No associated CVEs found.")
             continue
         for cve in finding["cves"]:
             lines.extend(
@@ -259,7 +274,10 @@ def generate_audit_report(
             f"Service: {finding['service'] or 'unknown'} | Version: {finding['version'] or 'unknown'}"
         )
         if not finding["cves"]:
-            lines.append("  No associated CVEs found.")
+            if finding.get("cve_analysis_status") == "unverified":
+                lines.append("  CVE analysis unavailable - product/version not identified.")
+            else:
+                lines.append("  No associated CVEs found.")
             continue
         for cve in finding["cves"]:
             lines.extend(
