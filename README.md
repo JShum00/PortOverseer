@@ -137,6 +137,28 @@ run.bat
 7. Exit
 ```
 
+### Non-interactive / scripting
+
+The tool can also run entirely from the command line, which is what the
+launcher and any automation uses:
+
+```
+python main.py scan --mode quick                      # top 1,000 ports
+python main.py scan --mode full                       # all 65,535 ports
+python main.py scan --mode custom --start 8000 --end 8100
+python main.py scan --mode quick --json               # JSON summary on stdout
+python main.py audit --depth quick                    # loopback + LAN sweep
+python main.py audit --depth full --json
+python main.py update --yes                           # refresh the CVE database
+python main.py --version
+```
+
+- `--json` prints a machine-readable summary to **stdout** (JSON) and routes all
+  human-facing chatter to **stderr**, so it can be piped: `python main.py scan --json | jq .`
+- `--skip-env-check` (or the `PORTOVERSEER_SKIP_ENV_CHECK` env var) bypasses the
+  bundled-virtualenv check for containers and CI.
+- `--no-spinner` disables the animated scanning spinner.
+
 ### First-time setup
 
 On first run, select **option 4** to download the CVE database before scanning. This requires an internet connection and takes approximately 20–30 minutes to download all ~341,000 CVEs. Subsequent scans run fully offline. If you don't want to run the update function on the machine you intend to scan, you can update the application on another Trusted machine and then transfer to the untrusted machine via USB/Flash drive.
@@ -176,7 +198,7 @@ reports/
 PORT OVERSEER
 Scan Type: Quick Scan
 Timestamp: 20260330_225133
-Total Ports Scanned: 1
+Total Ports Scanned: 1000
 
 Summary
 Total Open Ports: 1
@@ -232,6 +254,22 @@ version detection. Unrecognized or generic service strings may return no CVE mat
 ## Planned Features
 
 - Pyinstaller builds
+
+## Testing
+
+The suite is fully offline — nmap, HTTP, and the filesystem are faked, and the
+CVE database / reports are redirected to a temp directory. It needs only the
+Python dependencies:
+
+```bash
+pip install -e ".[dev]"
+pytest               # 206 offline tests
+ruff check           # F, E9 bug-catching lints
+```
+
+Runtime dependencies are declared in `pyproject.toml` (and mirrored in
+`requirements.txt`). The `data/` CVE store and `reports/` output are
+git-ignored so a database sync never lands in the repository.
 
 ---
 

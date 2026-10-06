@@ -18,12 +18,26 @@ except ImportError:  # pragma: no cover - package-style import fallback
 
 NVD_API_URL = "https://services.nvd.nist.gov/rest/json/cves/2.0"
 PAGE_SIZE = 2000
+#: NVD throttles keyless clients to roughly 5 requests per 30 seconds.
+REQUEST_DELAY_SECONDS = 6
 DEFAULT_REMEDIATION = (
     "Refer to vendor advisory and apply available patches or mitigations."
 )
 PROGRESS_BAR_WIDTH = 40
 INSERT_BATCH_SIZE = 1000
 LAST_UPDATED_PATH = DATA_DIR / "last_updated.txt"
+BACKUP_PATH = DATA_DIR / "cve_db_backup_1.sqlite"
+
+INSERT_COLUMNS = (
+    "id",
+    "service",
+    "version",
+    "cvss_score",
+    "severity_label",
+    "description",
+    "remediation",
+    "reference_url",
+)
 
 
 def rotate_backups() -> None:
@@ -44,6 +58,24 @@ def rotate_backups() -> None:
         backup_1.replace(backup_2)
     if current_db.exists():
         current_db.replace(backup_1)
+
+
+def _restore_from_backup() -> bool:
+    """Restore the most recent backup over the live database.
+
+    Used when a rebuild fails after backup rotation so the previously working
+    CVE data is never lost. Returns ``True`` when a restore happened.
+    """
+    if not BACKUP_PATH.exists():
+        return False
+
+    try:
+        if DB_PATH.exists():
+            DB_PATH.unlink()
+        BACKUP_PATH.replace(DB_PATH)
+    except OSError:
+        return False
+    return True
 
 
 def _render_progress(label: str, current: int, total: int) -> None:
@@ -100,11 +132,14 @@ def download_nvd_data(
 
         _render_progress("Downloading CVEs...", len(raw_items), total_results)
 
-        if not vulnerabilities:
+        start_index += PAGE_SIZE
+
+        # Stop on an empty page (defensive) or once every page has been read;
+        # never sleep between the final page and the return.
+        if not vulnerabilities or start_index >= total_results:
             break
 
-        time.sleep(6)
-        start_index += PAGE_SIZE
+        time.sleep(REQUEST_DELAY_SECONDS)
 
     if total_results is not None:
         _render_progress("Downloading CVEs...", len(raw_items), total_results)
@@ -139,11 +174,14 @@ def _insert_cves_batch(records: list[tuple]) -> None:
         sys.stdout.flush()
         return
 
+    column_list = ", ".join(INSERT_COLUMNS)
+    placeholders = ", ".join("?" for _ in INSERT_COLUMNS)
+
     with sqlite3.connect(DB_PATH) as connection:
         for start in range(0, len(records), INSERT_BATCH_SIZE):
             batch = records[start : start + INSERT_BATCH_SIZE]
             connection.executemany(
-                "INSERT OR REPLACE INTO cves VALUES (?,?,?,?,?,?,?,?)",
+                f"INSERT OR REPLACE INTO cves ({column_list}) VALUES ({placeholders})",
                 batch,
             )
             _render_progress(
@@ -182,7 +220,7 @@ def _get_score(metrics: dict) -> float | None:
             if not isinstance(cvss_data, dict):
                 continue
             score = cvss_data.get("baseScore")
-            if isinstance(score, (int, float)):
+            if isinstance(score, (int, float)) and not isinstance(score, bool):
                 return float(score)
     return None
 
@@ -227,11 +265,12 @@ def _extract_service_and_version(raw: dict) -> tuple[str, str]:
                     continue
 
                 parts = criteria.split(":")
+                # cpe:2.3:<part>:<vendor>:<product>:<version>:...
                 if len(parts) < 6:
                     continue
 
-                service = "" if parts[4] == "*" else parts[4]
-                version = "" if parts[5] == "*" else parts[5]
+                service = "" if parts[4] in ("*", "-") else parts[4]
+                version = "" if parts[5] in ("*", "-") else parts[5]
                 if service or version:
                     return service, version
 
@@ -239,7 +278,11 @@ def _extract_service_and_version(raw: dict) -> tuple[str, str]:
 
 
 def parse_cve(raw: dict) -> dict | None:
-    """Convert a raw NVD item into the internal CVE record format."""
+    """Convert a raw NVD item into the internal CVE record format.
+
+    Returns ``None`` for entries without an id or a CVSS score, since the tool's
+    severity ratings are driven entirely by the score.
+    """
     cve_data = raw.get("cve")
     if not isinstance(cve_data, dict):
         return None
@@ -270,8 +313,38 @@ def parse_cve(raw: dict) -> dict | None:
     }
 
 
+def _to_records(raw_cves: list[dict]) -> tuple[list[tuple], int]:
+    """Convert raw NVD items into insert-ready tuples.
+
+    Returns ``(records, skipped)`` where ``skipped`` counts items that could not
+    be parsed (missing id or CVSS score).
+    """
+    records: list[tuple] = []
+    skipped = 0
+
+    for raw_cve in raw_cves:
+        if not isinstance(raw_cve, dict):
+            skipped += 1
+            continue
+
+        parsed = parse_cve(raw_cve)
+        if parsed is None:
+            skipped += 1
+            continue
+
+        records.append(tuple(parsed[column] for column in INSERT_COLUMNS))
+
+    return records, skipped
+
+
 def update_database() -> None:
-    """Download, parse, and store CVEs in the local SQLite database."""
+    """Download, parse, and store CVEs in the local SQLite database.
+
+    The new data is fully downloaded and parsed *before* the live database is
+    touched. Rotating backups and creating the replacement database first would
+    leave an empty CVE table behind whenever the network or parsing failed,
+    which silently downgrades every later scan to "no known CVEs".
+    """
     last_updated = _load_last_updated_timestamp()
     current_timestamp = _current_timestamp()
 
@@ -280,33 +353,21 @@ def update_database() -> None:
     else:
         print("Performing full update.")
 
+    raw_cves = (
+        download_nvd_data(last_updated, current_timestamp) if last_updated else download_nvd_data()
+    )
+    records, skipped = _to_records(raw_cves)
+
     rotate_backups()
     initialize_db()
 
-    raw_cves = download_nvd_data(last_updated, current_timestamp) if last_updated else download_nvd_data()
-    records: list[tuple] = []
-    skipped = 0
+    try:
+        _insert_cves_batch(records)
+    except Exception:
+        if _restore_from_backup():
+            print("Database rebuild failed; restored the previous CVE database.")
+        raise
 
-    for raw_cve in raw_cves:
-        parsed = parse_cve(raw_cve)
-        if parsed is None:
-            skipped += 1
-            continue
-
-        records.append(
-            (
-                parsed["id"],
-                parsed["service"],
-                parsed["version"],
-                parsed["cvss_score"],
-                parsed["severity_label"],
-                parsed["description"],
-                parsed["remediation"],
-                parsed["reference_url"],
-            )
-        )
-
-    _insert_cves_batch(records)
     _write_last_updated_timestamp(current_timestamp)
 
     print(
