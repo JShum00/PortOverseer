@@ -1,0 +1,59 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "port-overseer"
+version = "1.0.0"
+description = "Offline-capable localhost port scanner that correlates open services against a locally cached NVD CVE database"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { file = "LICENSE" }
+authors = [{ name = "Johnny Shumway" }]
+keywords = ["security", "nmap", "cve", "vulnerability-scanner", "port-scanner", "offline"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: System Administrators",
+    "Operating System :: POSIX :: Linux",
+    "Operating System :: Microsoft :: Windows",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Security",
+]
+dependencies = [
+    "colorama>=0.4.6",
+    "python-nmap>=0.7.1",
+    "requests>=2.28",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0",
+    "ruff>=0.4",
+]
+
+[project.urls]
+Homepage = "https://github.com/JShum00/PortOverseer"
+Issues = "https://github.com/JShum00/PortOverseer/issues"
+
+# The tool is a flat set of top-level modules that are run from the project
+# checkout (see launcher.sh / launcher.bat); it resolves its data/ and reports/
+# directories relative to the source tree, so no console script is shipped.
+[tool.setuptools]
+py-modules = ["colors", "cve_lookup", "main", "reporter", "scanner", "updater"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+addopts = "-q"
+
+[tool.ruff]
+line-length = 100
+
+[tool.ruff.lint]
+# Bug-catching lints only: the codebase has a deliberate one-line `if` style
+# (E701) that is not worth churning.
+select = ["F", "E9"]
